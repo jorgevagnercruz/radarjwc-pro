@@ -1,0 +1,12 @@
+{
+  "name": "radarjwc-pro",
+  "version": "0.9.1",
+  "private": true,
+  "description": "Radar JWC PRO - scanner estatístico pré-jogo e radar ao vivo",
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}
