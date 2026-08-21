@@ -43,6 +43,12 @@ jobs:
             echo "environment=preview" >> "$GITHUB_OUTPUT"
             echo "prod_flag=" >> "$GITHUB_OUTPUT"
           fi
+      - name: Recriar vinculo local com a Vercel
+        shell: bash
+        run: |
+          rm -rf .vercel
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
       - name: Baixar configuracao da Vercel
         run: vercel pull --yes --environment=${{ steps.env.outputs.environment }} --token=${{ secrets.VERCEL_TOKEN }}
       - name: Build
