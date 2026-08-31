@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Minha conta · Radar JWC PRO</title>
+  <link rel="stylesheet" href="/auth.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div><div class="brand">⚡ MINHA CONTA</div><div class="sub">Dados pessoais e segurança</div></div>
+      <nav class="topnav"><a class="btn small" href="/">Voltar ao Radar</a><button class="btn small danger" onclick="logout()">Sair</button></nav>
+    </header>
+    <div id="message" class="message"></div>
+    <section class="users">
+      <div class="card">
+        <h2 style="margin:0 0 10px">Situação do acesso</h2>
+        <div class="badges"><span id="accessBadge" class="badge">Carregando...</span></div>
+        <div id="accessInfo" class="muted">Consultando seu período de acesso.</div>
+      </div>
+      <form id="paymentSection" class="card form" onsubmit="sendPayment(event)">
+        <h2 style="margin:0">Enviar comprovante</h2>
+        <div class="muted">Use esta área para uma nova assinatura ou renovação. O acesso só será alterado depois da conferência do administrador.</div>
+        <div class="field"><label>Plano</label><select id="paymentPlan" onchange="updatePaymentPix()" required><option value="MONTHLY">Mensal · 30 dias · R$ 15,00</option><option value="ANNUAL">Anual · 365 dias · R$ 100,00</option></select></div>
+        <div class="pixbox" aria-live="polite">
+          <div class="pixhead">
+            <div><small>PAGAMENTO VIA PIX</small><strong id="paymentPixAmount">R$ 15,00</strong></div>
+            <span id="paymentPixStatus" class="badge pending">Gerando QR Code...</span>
+          </div>
+          <div class="pixgrid">
+            <div id="paymentPixQr" class="pixqr"><span>Preparando QR Code...</span></div>
+            <div class="pixdetails">
+              <div>Escaneie com o aplicativo do seu banco. Confira o favorecido e o valor antes de confirmar.</div>
+              <div class="field"><label>Pix Copia e Cola</label><textarea id="paymentPixCode" rows="3" readonly aria-label="Código Pix Copia e Cola"></textarea></div>
+              <button id="paymentPixCopy" class="btn small" type="button" onclick="copyPix('payment',this)" disabled>Copiar código Pix</button>
+              <div class="pixidentity"><span><b>Chave:</b> radarjwcpro@gmail.com</span><span><b>Favorecido:</b> Jorge Vagner Vieira da Cruz</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="field"><label>Comprovante</label><input id="paymentFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required></div>
+        <div class="muted">PDF, JPG, PNG ou WebP, com no máximo 2 MB.</div>
+        <button class="btn primary" type="submit">Enviar para conferência</button>
+      </form>
+      <div id="paymentHistory" class="card">
+        <h2 style="margin:0 0 12px">Histórico de pagamentos</h2>
+        <div class="muted">Carregando...</div>
+      </div>
+      <form class="card form" onsubmit="updateProfile(event)">
+        <h2 style="margin:0">Dados do perfil</h2>
+        <div class="field"><label>Nome</label><input id="name" maxlength="120" required></div>
+        <div class="field"><label>E-mail</label><input id="email" type="email" maxlength="254" required></div>
+        <div class="field"><label>Senha atual para confirmar</label><input id="profilePassword" type="password" autocomplete="current-password" required></div>
+        <button class="btn primary" type="submit">Salvar perfil</button>
+      </form>
+      <form class="card form" onsubmit="changePassword(event)">
+        <h2 style="margin:0">Alterar senha</h2>
+        <div class="field"><label>Senha atual</label><input id="currentPassword" type="password" autocomplete="current-password" required></div>
+        <div class="field"><label>Nova senha</label><input id="newPassword" type="password" minlength="10" autocomplete="new-password" required></div>
+        <div class="field"><label>Confirme a nova senha</label><input id="confirmPassword" type="password" minlength="10" autocomplete="new-password" required></div>
+        <div class="muted">Mínimo de 10 caracteres, com maiúscula, minúscula e número.</div>
+        <button class="btn primary" type="submit">Alterar senha</button>
+      </form>
+    </section>
+  </main>
+  <script>
+    const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const statusLabels={PENDING:'Pendente',APPROVED:'Ativo',REJECTED:'Recusado',SUSPENDED:'Suspenso'};
+    const paymentLabels={PENDING:'Aguardando conferência',CONFIRMED:'Pagamento confirmado',REJECTED:'Comprovante rejeitado'};
+    const planDetails={MONTHLY:{price:'R$ 15,00'},ANNUAL:{price:'R$ 100,00'}};
+    let commercialPlans={};
+    function fmt(value){return value?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'long',timeStyle:'short'}).format(new Date(value)):'—'}
+    function msg(text,type=''){const e=$('#message');e.textContent=text;e.className='message'+(text?' show '+type:'')}
+    async function api(data){
+      const r=await fetch('/api/auth/profile',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      const j=await r.json().catch(()=>({error:'Resposta inválida.'}));
+      if(r.status===401&&j.code==='UNAUTHENTICATED'){location.replace('/login.html');throw Error('Sessão expirada.')}
+      if(!r.ok)throw Error(j.error||'Não foi possível salvar.');
+      return j;
+    }
+    function filePayload(file){
+      if(!file)return Promise.reject(Error('Selecione o comprovante.'));
+      if(file.size>2*1024*1024)return Promise.reject(Error('O comprovante deve ter no máximo 2 MB.'));
+      return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,data:reader.result});reader.onerror=()=>reject(Error('Não foi possível ler o comprovante.'));reader.readAsDataURL(file)});
+    }
+    async function paymentsApi(options={}){
+      const r=await fetch('/api/payments',{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}}),j=await r.json().catch(()=>({error:'Resposta inválida.'}));
+      if(r.status===401){location.replace('/login.html');throw Error('Sessão expirada.')}
+      if(!r.ok)throw Error(j.error||'Não foi possível concluir.');return j;
+    }
+    function updatePaymentPix(){
+      const code=$('#paymentPlan').value,selected=planDetails[code]||planDetails.MONTHLY,remote=commercialPlans[code];
+      $('#paymentPixAmount').textContent=selected.price;
+      if(!remote?.pix?.payload||!remote?.pix?.qrSvg)return;
+      $('#paymentPixQr').innerHTML=remote.pix.qrSvg;$('#paymentPixCode').value=remote.pix.payload;$('#paymentPixCopy').disabled=false;
+      $('#paymentPixStatus').textContent='QR Code pronto';$('#paymentPixStatus').className='badge approved';
+    }
+    async function loadPaymentConfig(){
+      try{const r=await fetch('/api/payments?config=1'),j=await r.json();if(!r.ok||!j.ok)throw Error(j.error||'QR Code indisponível.');commercialPlans=Object.fromEntries(j.plans.map(plan=>[plan.code,plan]));updatePaymentPix()}
+      catch(error){$('#paymentPixStatus').textContent='QR indisponível';$('#paymentPixStatus').className='badge rejected';$('#paymentPixQr').innerHTML='<span>Use a chave Pix informada ao lado.</span>'}
+    }
+    async function copyPix(prefix,button){
+      const field=$('#'+prefix+'PixCode'),original=button.textContent;
+      try{if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(field.value);else{field.focus();field.select();document.execCommand('copy');field.setSelectionRange(0,0)}button.textContent='Código copiado!';setTimeout(()=>button.textContent=original,1800)}
+      catch(_){msg('Não foi possível copiar automaticamente. Selecione o código e copie.','error')}
+    }
+    function planLabel(p){return p.planType==='ANNUAL'?'Plano anual · R$ 100,00':p.planType==='MONTHLY'?'Plano mensal · R$ 15,00':'Plano não informado'}
+    function paymentCard(p){return '<div class="paymentitem"><div class="resultline"><div><b>'+esc(p.fileName)+'</b><div class="muted">'+esc(planLabel(p))+'</div></div><span class="badge '+String(p.status).toLowerCase()+'">'+esc(paymentLabels[p.status]||p.status)+'</span></div><div class="muted">Enviado em '+fmt(p.submittedAt)+'</div>'+(p.reviewNote?'<div class="reviewnote">Observação: '+esc(p.reviewNote)+'</div>':'')+'</div>'}
+    async function loadPayments(){try{const j=await paymentsApi();$('#paymentHistory').innerHTML='<h2 style="margin:0 0 12px">Histórico de pagamentos</h2>'+(j.payments.length?j.payments.map(paymentCard).join(''):'<div class="muted">Nenhum comprovante enviado.</div>')}catch(error){msg(error.message,'error')}}
+    async function sendPayment(event){event.preventDefault();const button=event.submitter,plan=$('#paymentPlan').value;button.disabled=true;msg('Enviando comprovante...');try{const receipt=await filePayload($('#paymentFile').files[0]);const j=await paymentsApi({method:'POST',body:JSON.stringify({receipt,plan})});event.target.reset();updatePaymentPix();msg(j.message,'ok');await loadPayments()}catch(error){msg(error.message,'error')}finally{button.disabled=false}}
+    async function updateProfile(event){
+      event.preventDefault();
+      try{const j=await api({name:$('#name').value,email:$('#email').value,currentPassword:$('#profilePassword').value});$('#profilePassword').value='';msg('Perfil atualizado.','ok')}catch(error){msg(error.message,'error')}
+    }
+    async function changePassword(event){
+      event.preventDefault();
+      if($('#newPassword').value!==$('#confirmPassword').value)return msg('A confirmação da senha não confere.','error');
+      try{const j=await api({currentPassword:$('#currentPassword').value,newPassword:$('#newPassword').value});event.target.reset();msg(j.message,'ok')}catch(error){msg(error.message,'error')}
+    }
+    async function logout(){await fetch('/api/auth/logout',{method:'POST'});location.replace('/login.html')}
+    updatePaymentPix();loadPaymentConfig();
+    fetch('/api/auth/me').then(async r=>{if(!r.ok)return location.replace('/login.html');const j=await r.json(),u=j.user;$('#name').value=u.name;$('#email').value=u.email;if(u.role==='ADMIN'){$('#accessBadge').textContent='Administrador';$('#accessBadge').className='badge approved';$('#accessInfo').textContent='Acesso administrativo sem vencimento.';$('#paymentSection').style.display='none';$('#paymentHistory').style.display='none'}else if(u.status==='PENDING'){$('#accessBadge').textContent='Aguardando aprovação';$('#accessBadge').className='badge pending';$('#accessInfo').textContent='Seu cadastro ainda será analisado. Você pode acompanhar ou substituir o comprovante abaixo.';await loadPayments()}else if(!u.accessActive){$('#accessBadge').textContent='Expirado';$('#accessBadge').className='badge expired';$('#accessInfo').textContent='Seu acesso venceu em '+fmt(u.accessUntil)+'. Envie o comprovante abaixo para solicitar a renovação.';await loadPayments()}else{$('#accessBadge').textContent=statusLabels[u.status]||u.status;$('#accessBadge').className='badge approved';$('#accessInfo').textContent='Acesso autorizado até '+fmt(u.accessUntil)+'.';await loadPayments()}}).catch(()=>location.replace('/login.html'));
+  </script>
+</body>
+</html>

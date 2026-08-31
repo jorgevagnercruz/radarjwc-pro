@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Usuários · Radar JWC PRO</title>
+  <link rel="stylesheet" href="/auth.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div><div class="brand">⚡ CONTROLE DE USUÁRIOS</div><div class="sub">Radar JWC PRO</div></div>
+      <nav class="topnav"><a class="btn small" href="/">Voltar ao Radar</a><a class="btn small" href="/account.html">Minha conta</a><button class="btn small danger" onclick="logout()">Sair</button></nav>
+    </header>
+    <div class="summary">
+      <div class="sum"><small>Pendentes</small><b id="cPending">0</b></div>
+      <div class="sum"><small>Ativos</small><b id="cApproved">0</b></div>
+      <div class="sum"><small>Expirados</small><b id="cExpired">0</b></div>
+      <div class="sum"><small>Suspensos/recusados</small><b id="cBlocked">0</b></div>
+      <div class="sum"><small>Pagamentos a conferir</small><b id="cPaymentPending">0</b></div>
+      <div class="sum"><small>Pagamentos confirmados</small><b id="cPaymentConfirmed">0</b></div>
+    </div>
+    <div class="top"><div><b>Solicitações e assinaturas</b><div class="sub">Aprovações de 30 dias simulam mensalidade; 365 dias, anualidade.</div></div><button class="btn primary" onclick="loadUsers()">Atualizar</button></div>
+    <div id="message" class="message"></div>
+    <section id="users" class="users"><div class="card empty">Carregando usuários...</div></section>
+  </main>
+  <script>
+    const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const labels={PENDING:'Pendente',APPROVED:'Ativo',EXPIRED:'Expirado',REJECTED:'Recusado',SUSPENDED:'Suspenso'};
+    const paymentLabels={PENDING:'Aguardando conferência',CONFIRMED:'Pagamento confirmado',REJECTED:'Comprovante rejeitado'};
+    const planLabels={MONTHLY:'Mensal · 30 dias · R$ 15,00',ANNUAL:'Anual · 365 dias · R$ 100,00'};
+    function fmt(value){return value?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(new Date(value)):'—'}
+    function msg(text,type=''){const e=$('#message');e.textContent=text;e.className='message'+(text?' show '+type:'')}
+    async function api(url,options={}){
+      const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});
+      const j=await r.json().catch(()=>({error:'Resposta inválida.'}));
+      if(r.status===401){location.replace('/login.html');throw Error('Sessão expirada.')}
+      if(r.status===403&&j.code==='FORBIDDEN'){location.replace('/');throw Error('Acesso negado.')}
+      if(!r.ok)throw Error(j.error||'Falha na operação.');
+      return j;
+    }
+    function actions(u){
+      if(u.role==='ADMIN')return '<div class="muted">Administrador principal</div>';
+      const id=Number(u.id),state=u.effectiveStatus;
+      let buttons='';
+      if(state==='PENDING')buttons='<button class="btn small primary" onclick="act('+id+',\'approve\',30)">Aprovar 30 dias</button><button class="btn small primary" onclick="act('+id+',\'approve\',365)">Aprovar 1 ano</button><button class="btn small danger" onclick="act('+id+',\'reject\')">Recusar</button>';
+      else if(state==='APPROVED')buttons='<button class="btn small primary" onclick="act('+id+',\'renew\',30)">Renovar 30 dias</button><button class="btn small primary" onclick="act('+id+',\'renew\',365)">Renovar 1 ano</button><button class="btn small warn" onclick="act('+id+',\'suspend\')">Suspender</button><button class="btn small" onclick="act('+id+',\'revoke_sessions\')">Encerrar sessões</button>';
+      else buttons='<button class="btn small primary" onclick="act('+id+',\'renew\',30)">Reativar 30 dias</button><button class="btn small primary" onclick="act('+id+',\'renew\',365)">Reativar 1 ano</button>';
+      return '<div class="actions">'+buttons+'</div><div class="customdate"><div class="field"><label>Ou defina o vencimento</label><input id="date-'+id+'" type="date"></div><button class="btn small" onclick="customDate('+id+')">Aplicar data</button></div>';
+    }
+    function paymentCard(p){
+      const id=Number(p.id),status=String(p.status),canConfirm=status!=='CONFIRMED',canReject=status!=='REJECTED';
+      return '<div class="paymentitem"><div class="resultline"><div><b>'+esc(p.fileName)+'</b><div class="muted">'+esc(planLabels[p.planType]||'Plano não informado')+'<br>Enviado em '+fmt(p.submittedAt)+'</div></div><span class="badge '+status.toLowerCase()+'">'+esc(paymentLabels[status]||status)+'</span></div>'+(p.reviewNote?'<div class="reviewnote">Observação: '+esc(p.reviewNote)+'</div>':'')+'<div class="actions"><a class="btn small" target="_blank" rel="noopener" href="/api/admin/payments?id='+id+'">Visualizar/baixar</a>'+(canConfirm?'<button class="btn small primary" onclick="reviewPayment('+id+',\'confirm\')">Confirmar pagamento</button>':'')+(canReject?'<button class="btn small danger" onclick="reviewPayment('+id+',\'reject\')">Rejeitar</button>':'')+'</div></div>';
+    }
+    function payments(u){
+      if(u.role==='ADMIN')return '';
+      const list=u.payments||[],state=list.some(p=>p.status==='CONFIRMED')?'Pagamento confirmado':list.some(p=>p.status==='PENDING')?'Comprovante aguardando conferência':'Sem pagamento confirmado';
+      const cls=list.some(p=>p.status==='CONFIRMED')?'confirmed':list.some(p=>p.status==='PENDING')?'pending':'rejected';
+      return '<div class="paymentsection"><div class="resultline"><b>Pagamentos e comprovantes</b><span class="badge '+cls+'">'+state+'</span></div>'+(list.length?list.map(paymentCard).join(''):'<div class="muted" style="margin-top:10px">Nenhum comprovante enviado por este usuário.</div>')+'</div>';
+    }
+    function card(u){
+      return '<article class="card"><div class="userhead"><div><div class="username">'+esc(u.name)+'</div><div class="muted">'+esc(u.email)+'</div><div class="badges"><span class="badge '+String(u.effectiveStatus).toLowerCase()+'">'+labels[u.effectiveStatus]+'</span><span class="badge">'+esc(u.role)+'</span><span class="badge">'+esc(planLabels[u.requestedPlan]||'Plano não informado')+'</span></div></div><div class="muted">Solicitado: '+fmt(u.requestedAt)+'<br>Vencimento: <b>'+fmt(u.accessUntil)+'</b><br>Último login: '+fmt(u.lastLoginAt)+'</div></div>'+payments(u)+actions(u)+'</article>';
+    }
+    async function loadUsers(){
+      try{
+        const j=await api('/api/admin/users');
+        const c=j.counts||{},p=j.paymentCounts||{};$('#cPending').textContent=c.PENDING||0;$('#cApproved').textContent=c.APPROVED||0;$('#cExpired').textContent=c.EXPIRED||0;$('#cBlocked').textContent=(c.SUSPENDED||0)+(c.REJECTED||0);$('#cPaymentPending').textContent=p.PENDING||0;$('#cPaymentConfirmed').textContent=p.CONFIRMED||0;
+        $('#users').innerHTML=j.users.length?j.users.map(card).join(''):'<div class="card empty">Nenhum usuário cadastrado.</div>';
+      }catch(error){msg(error.message,'error')}
+    }
+    async function act(userId,action,days){
+      if((action==='reject'||action==='suspend')&&!confirm('Confirma esta alteração de acesso?'))return;
+      try{await api('/api/admin/users',{method:'PATCH',body:JSON.stringify({userId,action,days})});msg('Acesso atualizado.','ok');await loadUsers()}catch(error){msg(error.message,'error')}
+    }
+    async function customDate(userId){
+      const date=$('#date-'+userId).value;if(!date)return msg('Escolha a data de vencimento.','error');
+      try{await api('/api/admin/users',{method:'PATCH',body:JSON.stringify({userId,action:'renew',accessUntil:date+'T23:59:59-03:00'})});msg('Vencimento atualizado.','ok');await loadUsers()}catch(error){msg(error.message,'error')}
+    }
+    async function reviewPayment(paymentId,action){
+      const promptText=action==='confirm'?'Observação da conferência (opcional):':'Informe o motivo da rejeição (opcional):',note=prompt(promptText,'');if(note===null)return;
+      try{await api('/api/admin/payments',{method:'PATCH',body:JSON.stringify({paymentId,action,note})});msg(action==='confirm'?'Pagamento confirmado.':'Comprovante rejeitado.','ok');await loadUsers()}catch(error){msg(error.message,'error')}
+    }
+    async function logout(){await fetch('/api/auth/logout',{method:'POST'});location.replace('/login.html')}
+    api('/api/auth/me').then(j=>{if(j.user.role!=='ADMIN')location.replace('/');else loadUsers()}).catch(()=>{});
+  </script>
+</body>
+</html>

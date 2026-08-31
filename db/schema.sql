@@ -60,3 +60,7 @@ CREATE TABLE IF NOT EXISTS fixture_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_fixtures_starting_at ON fixtures(starting_at);
 CREATE INDEX IF NOT EXISTS idx_snapshots_fixture_minute ON fixture_snapshots(fixture_id, minute, created_at);
+
+
+ALTER TABLE fixtures ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'sportmonks';
+

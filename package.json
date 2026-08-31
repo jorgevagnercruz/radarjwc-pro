@@ -1,12 +1,16 @@
 {
   "name": "radarjwc-pro",
-  "version": "0.9.1",
+  "version": "2.5.0",
   "private": true,
-  "description": "Radar JWC PRO - scanner estatístico pré-jogo e radar ao vivo",
+  "description": "Radar JWC PRO - scanner, radar ao vivo, sinais de gol, desempenho e controle de usuários",
   "engines": {
     "node": "24.x"
   },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
   "dependencies": {
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "qrcode": "^1.5.4"
   }
 }

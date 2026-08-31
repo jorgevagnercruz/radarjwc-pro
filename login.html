@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Acesso · Radar JWC PRO</title>
+  <link rel="stylesheet" href="/auth.css">
+</head>
+<body>
+  <main class="shell authwrap">
+    <section id="authCard" class="authcard">
+      <a class="muted" href="/apresentacao.html">← Conheça o Radar JWC PRO e os planos</a>
+      <div class="brand">⚡ RADAR JWC PRO</div>
+      <div class="sub">Acesso controlado e autorizado pelo administrador</div>
+
+      <div class="tabs">
+        <button id="loginTab" class="tab on" onclick="showView('login')">Entrar</button>
+        <button id="registerTab" class="tab" onclick="showView('register')">Solicitar cadastro</button>
+      </div>
+
+      <form id="loginForm" class="form" onsubmit="login(event)">
+        <div class="field"><label>E-mail</label><input id="loginEmail" type="email" autocomplete="username" required></div>
+        <div class="field"><label>Senha</label><input id="loginPassword" type="password" autocomplete="current-password" required></div>
+        <button class="btn primary" type="submit">Entrar no sistema</button>
+      </form>
+
+      <form id="registerForm" class="form" style="display:none" onsubmit="register(event)">
+        <div class="field"><label>Plano desejado</label><select id="registerPlan" onchange="updatePlan()" required><option value="MONTHLY">Mensal · 30 dias · R$ 15,00</option><option value="ANNUAL">Anual · 365 dias · R$ 100,00</option></select></div>
+        <div id="selectedPlan" class="reviewnote">Plano mensal: R$ 15,00 por 30 dias.</div>
+        <div class="pixbox" aria-live="polite">
+          <div class="pixhead">
+            <div><small>PAGAMENTO VIA PIX</small><strong id="registerPixAmount">R$ 15,00</strong></div>
+            <span id="registerPixStatus" class="badge pending">Gerando QR Code...</span>
+          </div>
+          <div class="pixgrid">
+            <div id="registerPixQr" class="pixqr"><span>Preparando QR Code...</span></div>
+            <div class="pixdetails">
+              <div>Escaneie com o aplicativo do seu banco. Confira o favorecido e o valor antes de confirmar.</div>
+              <div class="field"><label>Pix Copia e Cola</label><textarea id="registerPixCode" rows="3" readonly aria-label="Código Pix Copia e Cola"></textarea></div>
+              <button id="registerPixCopy" class="btn small" type="button" onclick="copyPix('register',this)" disabled>Copiar código Pix</button>
+              <div class="pixidentity"><span><b>Chave:</b> radarjwcpro@gmail.com</span><span><b>Favorecido:</b> Jorge Vagner Vieira da Cruz</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="field"><label>Nome completo</label><input id="registerName" maxlength="120" autocomplete="name" required></div>
+        <div class="field"><label>E-mail</label><input id="registerEmail" type="email" maxlength="254" autocomplete="email" required></div>
+        <div class="field"><label>Crie uma senha</label><input id="registerPassword" type="password" minlength="10" autocomplete="new-password" required></div>
+        <div class="field"><label>Confirme a senha</label><input id="registerConfirm" type="password" minlength="10" autocomplete="new-password" required></div>
+        <div class="muted">Mínimo de 10 caracteres, com maiúscula, minúscula e número.</div>
+        <div class="paymentbox">
+          <b>Depois do pagamento, anexe o comprovante <span class="muted">(opcional neste momento)</span></b>
+          <div class="muted">Você pode enviar agora ou entrar depois em “Minha conta” para anexá-lo.</div>
+          <div class="field"><label>Arquivo</label><input id="registerReceipt" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"></div>
+          <div class="muted">PDF, JPG, PNG ou WebP, com no máximo 2 MB.</div>
+        </div>
+        <button class="btn primary" type="submit">Enviar solicitação</button>
+      </form>
+      <div id="message" class="message"></div>
+    </section>
+  </main>
+  <script>
+    const $=s=>document.querySelector(s);
+    const plans={MONTHLY:{label:'Plano mensal',price:'R$ 15,00',period:'30 dias'},ANNUAL:{label:'Plano anual',price:'R$ 100,00',period:'365 dias'}};
+    function showView(view){
+      $('#loginForm').style.display=view==='login'?'grid':'none';
+      $('#registerForm').style.display=view==='register'?'grid':'none';
+      $('#loginTab').classList.toggle('on',view==='login');
+      $('#registerTab').classList.toggle('on',view==='register');
+      $('#authCard').classList.toggle('registering',view==='register');
+      message('', '');
+    }
+    function message(text,type){
+      const el=$('#message');el.textContent=text;el.className='message'+(text?' show '+type:'');
+    }
+    let commercialPlans={};
+    function renderPix(prefix,planCode){
+      const selected=plans[planCode]||plans.MONTHLY,remote=commercialPlans[planCode];
+      $('#'+prefix+'PixAmount').textContent=selected.price;
+      if(!remote?.pix?.payload||!remote?.pix?.qrSvg)return;
+      $('#'+prefix+'PixQr').innerHTML=remote.pix.qrSvg;
+      $('#'+prefix+'PixCode').value=remote.pix.payload;
+      $('#'+prefix+'PixCopy').disabled=false;
+      const status=$('#'+prefix+'PixStatus');status.textContent='QR Code pronto';status.className='badge approved';
+    }
+    function updatePlan(){const code=$('#registerPlan').value,plan=plans[code]||plans.MONTHLY;$('#selectedPlan').textContent=plan.label+': '+plan.price+' por '+plan.period+'.';renderPix('register',code)}
+    async function loadPaymentConfig(){
+      try{
+        const response=await fetch('/api/payments?config=1'),body=await response.json();
+        if(!response.ok||!body.ok)throw Error(body.error||'QR Code indisponível.');
+        commercialPlans=Object.fromEntries(body.plans.map(plan=>[plan.code,plan]));updatePlan();
+      }catch(error){const status=$('#registerPixStatus');status.textContent='QR indisponível';status.className='badge rejected';$('#registerPixQr').innerHTML='<span>Use a chave Pix informada ao lado.</span>'}
+    }
+    async function copyPix(prefix,button){
+      const field=$('#'+prefix+'PixCode'),original=button.textContent;
+      try{
+        if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(field.value);
+        else{field.focus();field.select();document.execCommand('copy');field.setSelectionRange(0,0)}
+        button.textContent='Código copiado!';setTimeout(()=>button.textContent=original,1800);
+      }catch(_){message('Não foi possível copiar automaticamente. Selecione o código e copie.','error')}
+    }
+    async function send(url,data){
+      const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      const body=await response.json().catch(()=>({error:'Resposta inválida do servidor.'}));
+      if(!response.ok)throw Error(body.error||'Não foi possível concluir.');
+      return body;
+    }
+    function filePayload(file){
+      if(!file)return Promise.resolve(null);
+      if(file.size>2*1024*1024)return Promise.reject(Error('O comprovante deve ter no máximo 2 MB.'));
+      return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,data:reader.result});reader.onerror=()=>reject(Error('Não foi possível ler o comprovante.'));reader.readAsDataURL(file)});
+    }
+    async function login(event){
+      event.preventDefault();message('Validando acesso...','');
+      const button=event.submitter;button.disabled=true;
+      try{
+        const body=await send('/api/auth/login',{email:$('#loginEmail').value,password:$('#loginPassword').value});
+        location.replace(body.user.accessActive?'/':'/account.html');
+      }catch(error){message(error.message,'error');button.disabled=false}
+    }
+    async function register(event){
+      event.preventDefault();message('Enviando sua solicitação...','');
+      const button=event.submitter;button.disabled=true;
+      try{
+        if($('#registerPassword').value!==$('#registerConfirm').value)throw Error('A confirmação da senha não confere.');
+        const file=$('#registerReceipt').files[0],payload={name:$('#registerName').value,email:$('#registerEmail').value,password:$('#registerPassword').value,plan:$('#registerPlan').value};
+        if(file)payload.receipt=await filePayload(file);
+        const body=await send('/api/auth/register',payload);
+        event.target.reset();updatePlan();message(body.message,'ok');
+      }catch(error){message(error.message,'error')}finally{button.disabled=false}
+    }
+    const params=new URLSearchParams(location.search),requestedPlan=String(params.get('plan')||'').toUpperCase();
+    if(plans[requestedPlan])$('#registerPlan').value=requestedPlan;
+    updatePlan();
+    loadPaymentConfig();
+    if(params.get('view')==='register'||plans[requestedPlan])showView('register');
+    fetch('/api/auth/me').then(async r=>{if(r.ok){const j=await r.json();location.replace(j.user.accessActive?'/':'/account.html')}}).catch(()=>{});
+  </script>
+</body>
+</html>

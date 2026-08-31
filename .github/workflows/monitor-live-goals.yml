@@ -1,0 +1,40 @@
+name: Monitorar sinais de gol
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radar-live-goals
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      RADAR_CRON_SECRET: ${{ secrets.RADAR_CRON_SECRET }}
+    steps:
+      - name: Verificar configuração
+        id: config
+        shell: bash
+        run: |
+          if [ -z "$RADAR_CRON_SECRET" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Configure RADAR_CRON_SECRET para ativar o monitoramento."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Atualizar Radar ao vivo
+        if: steps.config.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            --retry 2 --retry-delay 10 --max-time 120 \
+            -H "Authorization: Bearer $RADAR_CRON_SECRET" \
+            https://radarjwc-pro.vercel.app/api/live > /dev/null
