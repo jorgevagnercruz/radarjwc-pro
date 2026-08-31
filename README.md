@@ -27,7 +27,7 @@ Versão 2.5.0 com sinais de gol ao vivo, alerta por Telegram, QR Code Pix por pl
 - Sportmonks continua sendo consultada nas competições incluídas na assinatura.
 - API-Football amplia a descoberta de partidas ao vivo e fornece estatísticas detalhadas quando disponível.
 - O Neon compartilha o resultado por quatro minutos entre todos os usuários, alinhado ao agendamento de cinco minutos e evitando uma consulta por usuário.
-- Estatísticas detalhadas são renovadas a cada 150 segundos, com no máximo seis partidas por ciclo.
+- O ciclo compartilhado é renovado a cada quatro minutos, com no máximo seis partidas detalhadas por ciclo.
 - O painel separa jogos encontrados, jogos com estatísticas, partidas dentro do padrão 50+ e pressão forte 80+.
 - Se uma fonte oscilar, o sistema exibe por até dez minutos a leitura recente salva no Neon.
 - As partidas duplicadas entre fornecedores são unificadas, com preferência pelo registro de melhor cobertura estatística.
